@@ -3,7 +3,7 @@
 
 import os
 from app import app, db, login_manager
-from flask import render_template, request, redirect, url_for, flash, session, abort
+from flask import render_template, request, redirect, url_for, flash, session, abort,send_from_directory, url_for
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app.models import UserProfile
@@ -14,6 +14,15 @@ from werkzeug.security import check_password_hash
 ###
 # Routing for your application.
 ###
+
+
+def get_uploaded_images():
+    uploads_dir = os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER'])
+    filenames = []
+    for filename in os.listdir(uploads_dir):
+        if os.path.isfile(os.path.join(uploads_dir, filename)) and ('jpg' in filename or 'png' in filename):
+            filenames.append(filename)
+    return filenames
 
 @app.route('/')
 def home():
@@ -40,10 +49,9 @@ def upload():
         filename = secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
-        flash('File Saved')
+        flash('File Saved', 'success')
         return redirect(url_for('home')) # Update this to redirect the user to a route that displays all uploaded image files
-    else:
-        flash('Invalid file upload', 'error')
+
 
     return render_template('upload.html', form=form)
 
@@ -69,12 +77,26 @@ def login():
             login_user(user)
 
         # Remember to flash a message to the user
-            flash("Logged in successfully")
+            flash("Logged in successfully", "success")
             return redirect(url_for("upload"))  # The user should be redirected to the upload form instead
     return render_template("login.html", form=form)
 
 # user_loader callback. This callback is used to reload the user object from
 # the user ID stored in the session
+
+@app.route('/uploads/<path:filename>')
+def get_image(filename):
+    uploads_folder = app.config['UPLOAD_FOLDER']
+    return send_from_directory(uploads_folder, filename)
+
+@app.route('/files')
+@login_required
+def files():
+    image_files = get_uploaded_images()
+    image_urls = [url_for('get_image', filename=filename) for filename in image_files]
+    print(image_urls)
+    return render_template('files.html', image_urls=image_urls)
+
 @login_manager.user_loader
 def load_user(id):
     return db.session.execute(db.select(UserProfile).filter_by(id=id)).scalar()
@@ -84,6 +106,12 @@ def load_user(id):
 ###
 
 # Flash errors from the form if validation fails
+@app.route('/logout')
+def logout():
+    logout_user()
+    flash('You have been logged out', 'success')
+    return redirect(url_for('home'))
+    
 def flash_errors(form):
     for field, errors in form.errors.items():
         for error in errors:
